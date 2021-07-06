@@ -1,0 +1,4 @@
+// hello
+let x: number = -1+(2+3)+2*4;
+let y = x+1;
+let z: number;

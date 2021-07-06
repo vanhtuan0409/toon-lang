@@ -1,0 +1,6 @@
+[workspace]
+members = [
+  "tree-sitter-toon",
+  "cli",
+  "toon-core",
+]
