@@ -4,6 +4,7 @@ use inkwell::targets::{
 };
 use inkwell::OptimizationLevel;
 use std::path::Path;
+use std::process::{Command, Stdio};
 use tempfile::NamedTempFile;
 
 pub fn compile_object_code(module: &Module, path: &Path) -> Result<(), ()> {
@@ -17,7 +18,9 @@ pub fn compile_asm(module: &Module, path: &Path) -> Result<(), ()> {
 pub fn compile_executable(module: &Module, path: &Path) -> Result<(), ()> {
     let tmp_path = NamedTempFile::new().map_err(|_| ())?.into_temp_path();
     compile_object_code(module, &tmp_path)?;
-    std::process::Command::new("gcc")
+    Command::new("gcc")
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
         .arg("-o")
         .arg(path.as_os_str())
         .arg(tmp_path.as_os_str())

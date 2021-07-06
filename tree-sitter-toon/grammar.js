@@ -9,7 +9,8 @@ const PREC = {
   float_lit = choice(
     seq(int_lit, ".", optional(int_lit)),
     seq(".", int_lit),
-  );
+  ),
+  terminator = choice(";");
 
 module.exports = grammar({
   name: "toon",
@@ -43,16 +44,42 @@ module.exports = grammar({
         float_lit,
       )),
 
-    type: ($) =>
-      choice(
-        $._type_identifier,
+    escape_sequence: ($) =>
+      token.immediate(
+        seq(
+          "\\",
+          choice(
+            /[^xu]/,
+            /u[0-9a-fA-F]{4}/,
+            /u{[0-9a-fA-F]+}/,
+            /x[0-9a-fA-F]{2}/,
+          ),
+        ),
       ),
 
-    _type_identifier: ($) => choice("number", "bool"),
+    string_lit: ($) =>
+      seq(
+        '"',
+        repeat(
+          choice(token.immediate(prec(1, /[^"\n\\]+/)), $.escape_sequence),
+        ),
+        '"',
+      ),
+
+    _literal: ($) => choice($.bool_lit, $.number_lit, $.string_lit),
+
+    type: ($) =>
+      choice(
+        $._prime_type,
+      ),
+
+    _prime_type: ($) => choice("number", "bool"),
 
     statement: ($) =>
       choice(
         $.var_decl,
+        $.assign_stm,
+        seq($._expression, terminator),
       ),
 
     var_decl: ($) =>
@@ -67,22 +94,31 @@ module.exports = grammar({
           ),
           seq("=", field("var_expr", $._expression)), //with value assigned but no type. Eg: let x = 1;
         ),
-        ";",
+        terminator,
+      ),
+
+    assign_stm: ($) =>
+      seq(
+        field("var_name", $.ident),
+        "=",
+        field("var_expr", $._expression),
+        terminator,
       ),
 
     _expression: ($) =>
       choice(
+        $._literal,
         $.unary_expression,
         $.binary_expression,
-        $.number_lit,
-        $._parenthesised_expression,
+        $.parenthesised_expression,
+        $.call_expression,
         $.ident,
       ),
 
-    _parenthesised_expression: ($) =>
+    parenthesised_expression: ($) =>
       seq(
         "(",
-        $._expression,
+        field("inner", $._expression),
         ")",
       ),
 
@@ -111,5 +147,18 @@ module.exports = grammar({
         )
       ));
     },
+
+    argument_list: ($) =>
+      seq(
+        "(",
+        optional(seq($._expression, repeat(seq(",", $._expression)))),
+        ")",
+      ),
+
+    call_expression: ($) =>
+      seq(
+        field("func_name", $.ident),
+        field("args", $.argument_list),
+      ),
   },
 });

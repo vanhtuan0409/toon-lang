@@ -1,7 +1,7 @@
 use clap::Clap;
 use std::fs;
 use std::path::Path;
-use toon_core::ASTBuilder;
+use toon_core::parse as ast_parse;
 
 #[derive(Clap)]
 pub struct Opts {
@@ -14,8 +14,6 @@ pub fn parse(args: Opts) {
         .canonicalize()
         .expect("Invalid file path");
     let src = fs::read(&path).expect("Unable to read source file");
-    let src_ast = ASTBuilder::new()
-        .build(&src)
-        .expect("Unable to build AST from source");
-    println!("{:#?}", src_ast.node)
+    let prog = ast_parse(&src).expect("Unable to build AST from source");
+    println!("{:#?}", prog)
 }

@@ -2,7 +2,7 @@ use clap::Clap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use toon_core::{compile_asm, compile_executable, compile_object_code, ASTBuilder, Generator};
+use toon_core::{compile_asm, compile_executable, compile_object_code, parse, Generator};
 
 #[derive(Clap)]
 pub enum OutputType {
@@ -48,13 +48,11 @@ pub fn compile(args: Opts) {
         .canonicalize()
         .expect("Invalid file path");
     let src = fs::read(&path).expect("Unable to read source file");
-    let src_ast = ASTBuilder::new()
-        .build(&src)
-        .expect("Unable to build AST from source");
+    let prog = parse(&src).expect("Unable to build AST from source");
 
     let ctx = Generator::empty_context();
     let mut generator = Generator::new(&ctx, path.to_str().unwrap());
-    let ir_mod = generator.gen(&src_ast).expect("Unable to generate LLVM IR");
+    let ir_mod = generator.gen(&prog).expect("Unable to generate LLVM IR");
 
     match (args.out_type, args.out) {
         (OutputType::IR, out) => {

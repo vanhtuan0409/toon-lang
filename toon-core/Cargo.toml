@@ -8,3 +8,4 @@ tree-sitter = "0.19.5"
 tree-sitter-toon = { path = "../tree-sitter-toon" }
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm12-0"] }
 tempfile = "3.2.0"
+snailquote = "0.3.0"

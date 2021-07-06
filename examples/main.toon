@@ -2,3 +2,7 @@
 let x: number = -1+(2+3)+2*4;
 let y = x+1;
 let z: number;
+z = y*2;
+let k = true;
+let fmt_str = "Result is: %.2f";
+printf(fmt_str, z);
