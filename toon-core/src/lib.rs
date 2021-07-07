@@ -3,6 +3,7 @@ mod compile;
 mod jit;
 mod llvm_gen;
 mod parser;
+mod scope;
 mod visitor;
 
 pub use compile::*;

@@ -1,4 +1,5 @@
 use crate::ast::*;
+use crate::scope::Scope;
 use crate::visitor::{Visitable, Visitor};
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -7,7 +8,6 @@ use inkwell::passes::PassManager;
 use inkwell::types::{BasicType, BasicTypeEnum};
 use inkwell::values::{AnyValueEnum, BasicValueEnum, FunctionValue, PointerValue};
 use inkwell::AddressSpace;
-use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 
 pub struct Generator<'a> {
@@ -16,11 +16,7 @@ pub struct Generator<'a> {
     builder: Builder<'a>,
     #[allow(dead_code)]
     fpm: PassManager<FunctionValue<'a>>,
-
-    var_pointers: HashMap<String, PointerValue<'a>>,
-    global_strings: HashMap<String, (String, PointerValue<'a>)>,
-
-    string_uuid: usize,
+    scope: Scope<PointerValue<'a>>,
 }
 
 impl<'a> Generator<'a> {
@@ -35,11 +31,7 @@ impl<'a> Generator<'a> {
             module,
             builder,
             fpm,
-
-            var_pointers: HashMap::new(),
-            global_strings: HashMap::new(),
-
-            string_uuid: 0,
+            scope: Scope::default(),
         }
     }
 
@@ -92,10 +84,13 @@ impl<'a> Generator<'a> {
         }
     }
 
-    fn next_string_uuid(&mut self) -> String {
-        let id = format!("str{}", self.string_uuid);
-        self.string_uuid += 1;
-        id
+    fn enter_scope(&mut self) {
+        self.scope = Scope::new(Some(std::mem::take(&mut self.scope)));
+    }
+
+    fn leave_scope(&mut self) {
+        let last_scope = std::mem::take(&mut self.scope.parent).unwrap();
+        self.scope = *last_scope;
     }
 }
 
@@ -113,21 +108,21 @@ impl<'a> Visitor for Generator<'a> {
             (Some(ty), None) => {
                 let ty = self.get_llvm_data_type(ty);
                 let ptr = self.builder.build_alloca(ty, name);
-                self.var_pointers.insert(name.to_string(), ptr);
+                self.scope.register(name.to_string(), ptr);
                 Ok(ptr.into())
             }
             (None, Some(expr)) => {
                 let val: BasicValueEnum = expr.accept(self)?.try_into()?;
                 let ty = val.get_type();
                 let ptr = self.builder.build_alloca(ty, name);
-                self.var_pointers.insert(name.to_string(), ptr);
+                self.scope.register(name.to_string(), ptr);
                 let instr = self.builder.build_store(ptr, val);
                 Ok(instr.into())
             }
             (Some(ty), Some(expr)) => {
                 let ty = self.get_llvm_data_type(ty);
                 let ptr = self.builder.build_alloca(ty, name);
-                self.var_pointers.insert(name.to_string(), ptr);
+                self.scope.register(name.to_string(), ptr);
                 self.visit_assignment(name, expr)
             }
         }
@@ -135,7 +130,7 @@ impl<'a> Visitor for Generator<'a> {
 
     fn visit_assignment(&mut self, name: &str, expr: &Expression) -> Self::Result {
         let val: BasicValueEnum = expr.accept(self)?.try_into()?;
-        let ptr = self.var_pointers.get(name).ok_or(())?;
+        let ptr = self.scope.lookup(name).ok_or(())?;
         let instr = self.builder.build_store(*ptr, val);
         Ok(instr.into())
     }
@@ -166,7 +161,7 @@ impl<'a> Visitor for Generator<'a> {
     }
 
     fn visit_var_ref(&mut self, name: &str) -> Self::Result {
-        let ptr = self.var_pointers.get(name).ok_or(())?;
+        let ptr = self.scope.lookup(name).ok_or(())?;
         let val = self.builder.build_load(*ptr, name);
         Ok(val.into())
     }
@@ -185,15 +180,14 @@ impl<'a> Visitor for Generator<'a> {
                     false,
                 )
                 .into(),
-            Lit::String(val) => match self.global_strings.get(val) {
-                Some(record) => record.1.into(),
+            Lit::String(val) => match self.scope.lookup(val) {
+                Some(record) => (*record).into(),
                 None => {
-                    let id = self.next_string_uuid();
                     let ptr = self
                         .builder
-                        .build_global_string_ptr(val, &id)
+                        .build_global_string_ptr(val, "")
                         .as_pointer_value();
-                    self.global_strings.insert(val.clone(), (id, ptr));
+                    self.scope.register(val.clone(), ptr);
                     ptr.into()
                 }
             },
