@@ -14,6 +14,7 @@ pub struct Generator<'a> {
     context: &'a Context,
     module: Module<'a>,
     builder: Builder<'a>,
+    #[allow(dead_code)]
     fpm: PassManager<FunctionValue<'a>>,
 
     var_pointers: HashMap<String, PointerValue<'a>>,
