@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::scope::Scope;
+use crate::scope::ScopeStack;
 use crate::visitor::{Visitable, Visitor};
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -16,7 +16,7 @@ pub struct Generator<'a> {
     builder: Builder<'a>,
     #[allow(dead_code)]
     fpm: PassManager<FunctionValue<'a>>,
-    scope: Scope<PointerValue<'a>>,
+    scopes: ScopeStack<PointerValue<'a>>,
 }
 
 impl<'a> Generator<'a> {
@@ -25,13 +25,15 @@ impl<'a> Generator<'a> {
         let builder = ctx.create_builder();
         let fpm = PassManager::create(&module);
         fpm.initialize();
+        let mut scopes = ScopeStack::new();
+        scopes.enter_scope();
 
         Generator {
             context: ctx,
             module,
             builder,
             fpm,
-            scope: Scope::default(),
+            scopes,
         }
     }
 
@@ -83,15 +85,6 @@ impl<'a> Generator<'a> {
                 .as_basic_type_enum(),
         }
     }
-
-    fn enter_scope(&mut self) {
-        self.scope = Scope::new(Some(std::mem::take(&mut self.scope)));
-    }
-
-    fn leave_scope(&mut self) {
-        let last_scope = std::mem::take(&mut self.scope.parent).unwrap();
-        self.scope = *last_scope;
-    }
 }
 
 impl<'a> Visitor for Generator<'a> {
@@ -108,21 +101,21 @@ impl<'a> Visitor for Generator<'a> {
             (Some(ty), None) => {
                 let ty = self.get_llvm_data_type(ty);
                 let ptr = self.builder.build_alloca(ty, name);
-                self.scope.register(name.to_string(), ptr);
+                self.scopes.register(name.to_string(), ptr);
                 Ok(ptr.into())
             }
             (None, Some(expr)) => {
                 let val: BasicValueEnum = expr.accept(self)?.try_into()?;
                 let ty = val.get_type();
                 let ptr = self.builder.build_alloca(ty, name);
-                self.scope.register(name.to_string(), ptr);
+                self.scopes.register(name.to_string(), ptr);
                 let instr = self.builder.build_store(ptr, val);
                 Ok(instr.into())
             }
             (Some(ty), Some(expr)) => {
                 let ty = self.get_llvm_data_type(ty);
                 let ptr = self.builder.build_alloca(ty, name);
-                self.scope.register(name.to_string(), ptr);
+                self.scopes.register(name.to_string(), ptr);
                 self.visit_assignment(name, expr)
             }
         }
@@ -130,7 +123,7 @@ impl<'a> Visitor for Generator<'a> {
 
     fn visit_assignment(&mut self, name: &str, expr: &Expression) -> Self::Result {
         let val: BasicValueEnum = expr.accept(self)?.try_into()?;
-        let ptr = self.scope.lookup(name).ok_or(())?;
+        let ptr = self.scopes.lookup(name).ok_or(())?;
         let instr = self.builder.build_store(*ptr, val);
         Ok(instr.into())
     }
@@ -161,7 +154,7 @@ impl<'a> Visitor for Generator<'a> {
     }
 
     fn visit_var_ref(&mut self, name: &str) -> Self::Result {
-        let ptr = self.scope.lookup(name).ok_or(())?;
+        let ptr = self.scopes.lookup(name).ok_or(())?;
         let val = self.builder.build_load(*ptr, name);
         Ok(val.into())
     }
@@ -180,14 +173,14 @@ impl<'a> Visitor for Generator<'a> {
                     false,
                 )
                 .into(),
-            Lit::String(val) => match self.scope.lookup(val) {
+            Lit::String(val) => match self.scopes.lookup(val) {
                 Some(record) => (*record).into(),
                 None => {
                     let ptr = self
                         .builder
                         .build_global_string_ptr(val, "")
                         .as_pointer_value();
-                    self.scope.register(val.clone(), ptr);
+                    self.scopes.register(val.clone(), ptr);
                     ptr.into()
                 }
             },

@@ -1,0 +1,6 @@
+let x = 1;
+{
+  let x = 2;
+  prinf("%.2f", x);
+}
+prinf("%.2f", x);

@@ -1,42 +1,41 @@
 use std::collections::HashMap;
 
-#[derive(Debug, Clone)]
-pub struct Scope<T> {
-    pub symbols: HashMap<String, T>,
-    pub parent: Option<Box<Scope<T>>>,
+pub struct ScopeStack<T> {
+    stacks: Vec<Scope<T>>,
 }
 
-impl<T> std::default::Default for Scope<T> {
-    fn default() -> Self {
-        Self {
-            symbols: HashMap::new(),
-            parent: None,
-        }
-    }
-}
-
-impl<T> Scope<T> {
-    pub fn new(parent: Option<Scope<T>>) -> Self {
-        Scope {
-            symbols: HashMap::new(),
-            parent: match parent {
-                Some(ctx) => Some(Box::new(ctx)),
-                None => None,
-            },
-        }
+impl<T> ScopeStack<T> {
+    pub fn new() -> Self {
+        ScopeStack { stacks: vec![] }
     }
 
-    pub fn lookup(&self, name: &str) -> Option<&T> {
-        match self.symbols.get(name) {
-            Some(val) => Some(val),
-            None => match &self.parent {
-                Some(ctx) => ctx.lookup(name),
-                None => None,
-            },
-        }
+    pub fn enter_scope(&mut self) {
+        let scope = Scope {
+            symbols: HashMap::new(),
+        };
+        self.stacks.push(scope);
+    }
+
+    pub fn leave_scope(&mut self) {
+        let _ = self.stacks.pop();
     }
 
     pub fn register(&mut self, name: String, val: T) {
-        self.symbols.insert(name, val);
+        let scope = self.stacks.last_mut().unwrap();
+        scope.symbols.insert(name, val);
     }
+
+    pub fn lookup(&mut self, name: &str) -> Option<&T> {
+        for scope in self.stacks.iter().rev() {
+            if let Some(val) = scope.symbols.get(name) {
+                return Some(val);
+            }
+        }
+        None
+    }
+}
+
+#[derive(Debug)]
+struct Scope<T> {
+    symbols: HashMap<String, T>,
 }
