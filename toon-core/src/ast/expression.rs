@@ -1,23 +1,13 @@
 use super::*;
-use crate::visitor::{Visitable, Visitor};
+use crate::visitor::{MutVisitor, Visitable, Visitor};
 
 #[derive(Debug, Clone)]
 pub enum ExpressionKind {
     Lit(Lit),
-    BinaryExpr {
-        lhs: Box<Expression>,
-        rhs: Box<Expression>,
-        op: BinaryOp,
-    },
-    UnaryExpr {
-        expr: Box<Expression>,
-        op: UnaryOp,
-    },
-    VarRef(String),
-    CallExpr {
-        name: String,
-        args: Vec<Expression>,
-    },
+    BinaryExpr(BinaryExpr),
+    UnaryExpr(UnaryExpr),
+    VarRef(VarRef),
+    CallExpr(CallExpr),
 }
 
 #[derive(Debug, Clone)]
@@ -29,15 +19,53 @@ pub struct Expression {
 impl Visitable for Expression {
     fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Result {
         match &self.kind {
-            ExpressionKind::BinaryExpr { op, lhs, rhs } => visitor.visit_binary_op(op, lhs, rhs),
-            ExpressionKind::UnaryExpr { op, expr } => visitor.visit_unary_op(op, expr),
+            ExpressionKind::BinaryExpr(expr) => visitor.visit_binary_op(expr),
+            ExpressionKind::UnaryExpr(expr) => visitor.visit_unary_op(expr),
             ExpressionKind::Lit(lit) => visitor.visit_lit(lit),
-            ExpressionKind::VarRef(name) => visitor.visit_var_ref(name),
-            ExpressionKind::CallExpr { name, args } => {
-                visitor.visit_call_expr(name, args.as_slice())
-            }
+            ExpressionKind::VarRef(epxr) => visitor.visit_var_ref(epxr),
+            ExpressionKind::CallExpr(expr) => visitor.visit_call_expr(expr),
         }
     }
+
+    fn accept_mut<V: MutVisitor>(&mut self, visitor: &mut V) -> V::Result {
+        match &mut self.kind {
+            ExpressionKind::BinaryExpr(expr) => visitor.visit_binary_op(expr),
+            ExpressionKind::UnaryExpr(expr) => visitor.visit_unary_op(expr),
+            ExpressionKind::Lit(lit) => visitor.visit_lit(lit),
+            ExpressionKind::VarRef(epxr) => visitor.visit_var_ref(epxr),
+            ExpressionKind::CallExpr(expr) => visitor.visit_call_expr(expr),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BinaryExpr {
+    pub op: BinaryOp,
+    pub lhs: Box<Expression>,
+    pub rhs: Box<Expression>,
+
+    pub inferred_ty: Option<PrimeType>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UnaryExpr {
+    pub op: UnaryOp,
+    pub expr: Box<Expression>,
+
+    pub inferred_ty: Option<PrimeType>,
+}
+
+#[derive(Debug, Clone)]
+pub struct VarRef {
+    pub name: String,
+    pub inferred_ty: Option<PrimeType>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CallExpr {
+    pub name: String,
+    pub args: Vec<Expression>,
+    pub inferred_ty: Option<PrimeType>,
 }
 
 #[derive(Debug, Clone)]

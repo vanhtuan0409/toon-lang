@@ -33,7 +33,10 @@ fn parse_statement(node: Node, src: &[u8]) -> Result<Statement, ()> {
         _ => {
             let expr = parse_expr(child, src)?;
             Ok(Statement {
-                kind: StatementKind::Expression(expr),
+                kind: StatementKind::Expression(ExpressionStm {
+                    expr,
+                    inferred_ty: None,
+                }),
                 inferred_ty: None,
             })
         }
@@ -58,7 +61,12 @@ fn parse_var_decl(node: Node, src: &[u8]) -> Result<Statement, ()> {
     };
 
     Ok(Statement {
-        kind: StatementKind::VarDecl { name, ty, init_val },
+        kind: StatementKind::VarDecl(VarDecl {
+            name,
+            ty,
+            init_val,
+            inferred_ty: None,
+        }),
         inferred_ty: None,
     })
 }
@@ -73,7 +81,11 @@ fn parse_assign_stm(node: Node, src: &[u8]) -> Result<Statement, ()> {
     let expr_node = node.child_by_field_name("var_expr").ok_or(())?;
     let expr = parse_expr(expr_node, src)?;
     Ok(Statement {
-        kind: StatementKind::Assignment { name, expr },
+        kind: StatementKind::Assignment(Assignment {
+            name,
+            expr,
+            inferred_ty: None,
+        }),
         inferred_ty: None,
     })
 }
@@ -90,7 +102,10 @@ fn parse_block(node: Node, src: &[u8]) -> Result<Statement, ()> {
     }
 
     Ok(Statement {
-        kind: StatementKind::Block(ret),
+        kind: StatementKind::Block(Block {
+            statements: ret,
+            inferred_ty: None,
+        }),
         inferred_ty: None,
     })
 }
@@ -135,11 +150,12 @@ fn parse_binary_expr(node: Node, src: &[u8]) -> Result<Expression, ()> {
     };
 
     Ok(Expression {
-        kind: ExpressionKind::BinaryExpr {
+        kind: ExpressionKind::BinaryExpr(BinaryExpr {
             lhs: Box::new(parse_expr(left_node, src)?),
             rhs: Box::new(parse_expr(right_node, src)?),
             op,
-        },
+            inferred_ty: None,
+        }),
         inferred_ty: None,
     })
 }
@@ -155,10 +171,11 @@ fn parse_unary_expr(node: Node, src: &[u8]) -> Result<Expression, ()> {
     };
 
     Ok(Expression {
-        kind: ExpressionKind::UnaryExpr {
+        kind: ExpressionKind::UnaryExpr(UnaryExpr {
             expr: Box::new(parse_expr(operand_node, src)?),
             op,
-        },
+            inferred_ty: None,
+        }),
         inferred_ty: None,
     })
 }
@@ -200,7 +217,10 @@ fn parse_lit(node: Node, src: &[u8]) -> Result<Expression, ()> {
 fn parse_var_ref(node: Node, src: &[u8]) -> Result<Expression, ()> {
     let var_name = node.utf8_text(src).map_err(|_| ())?.to_string();
     Ok(Expression {
-        kind: ExpressionKind::VarRef(var_name),
+        kind: ExpressionKind::VarRef(VarRef {
+            name: var_name,
+            inferred_ty: None,
+        }),
         inferred_ty: None,
     })
 }
@@ -215,10 +235,11 @@ fn parse_call_expr(node: Node, src: &[u8]) -> Result<Expression, ()> {
     let args_node = node.child_by_field_name("args").ok_or(())?;
     let args = parse_arg_list(args_node, src)?;
     Ok(Expression {
-        kind: ExpressionKind::CallExpr {
+        kind: ExpressionKind::CallExpr(CallExpr {
             name: func_name,
             args,
-        },
+            inferred_ty: None,
+        }),
         inferred_ty: None,
     })
 }

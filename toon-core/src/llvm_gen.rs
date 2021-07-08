@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::scope::ScopeStack;
+use crate::scope::ScopeManager;
 use crate::visitor::{Visitable, Visitor};
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -16,7 +16,7 @@ pub struct Generator<'a> {
     builder: Builder<'a>,
     #[allow(dead_code)]
     fpm: PassManager<FunctionValue<'a>>,
-    scopes: ScopeStack<PointerValue<'a>>,
+    scopes: ScopeManager<PointerValue<'a>>,
 }
 
 impl<'a> Generator<'a> {
@@ -25,7 +25,7 @@ impl<'a> Generator<'a> {
         let builder = ctx.create_builder();
         let fpm = PassManager::create(&module);
         fpm.initialize();
-        let mut scopes = ScopeStack::new();
+        let mut scopes = ScopeManager::new();
         scopes.enter_scope();
 
         Generator {
@@ -90,47 +90,52 @@ impl<'a> Generator<'a> {
 impl<'a> Visitor for Generator<'a> {
     type Result = Result<AnyValueEnum<'a>, ()>;
 
-    fn visit_var_decl(
-        &mut self,
-        name: &str,
-        ty: Option<&PrimeType>,
-        init_val: Option<&Expression>,
-    ) -> Self::Result {
-        match (ty, init_val) {
+    fn visit_statement(&mut self, stm: &Statement) -> Self::Result {
+        stm.accept(self)
+    }
+
+    fn visit_var_decl(&mut self, stm: &VarDecl) -> Self::Result {
+        match (&stm.ty, &stm.init_val) {
             (None, None) => Err(()),
             (Some(ty), None) => {
                 let ty = self.get_llvm_data_type(ty);
-                let ptr = self.builder.build_alloca(ty, name);
-                self.scopes.register(name.to_string(), ptr);
+                let ptr = self.builder.build_alloca(ty, &stm.name);
+                self.scopes.register_local(stm.name.clone(), ptr);
                 Ok(ptr.into())
             }
             (None, Some(expr)) => {
                 let val: BasicValueEnum = expr.accept(self)?.try_into()?;
                 let ty = val.get_type();
-                let ptr = self.builder.build_alloca(ty, name);
-                self.scopes.register(name.to_string(), ptr);
+                let ptr = self.builder.build_alloca(ty, &stm.name);
+                self.scopes.register_local(stm.name.clone(), ptr);
                 let instr = self.builder.build_store(ptr, val);
                 Ok(instr.into())
             }
             (Some(ty), Some(expr)) => {
                 let ty = self.get_llvm_data_type(ty);
-                let ptr = self.builder.build_alloca(ty, name);
-                self.scopes.register(name.to_string(), ptr);
-                self.visit_assignment(name, expr)
+                let ptr = self.builder.build_alloca(ty, &stm.name);
+                self.scopes.register_local(stm.name.clone(), ptr);
+                let val: BasicValueEnum = expr.accept(self)?.try_into()?;
+                let instr = self.builder.build_store(ptr, val);
+                Ok(instr.into())
             }
         }
     }
 
-    fn visit_assignment(&mut self, name: &str, expr: &Expression) -> Self::Result {
-        let val: BasicValueEnum = expr.accept(self)?.try_into()?;
-        let ptr = self.scopes.lookup(name).ok_or(())?;
+    fn visit_assignment(&mut self, stm: &Assignment) -> Self::Result {
+        let val: BasicValueEnum = stm.expr.accept(self)?.try_into()?;
+        let ptr = self.scopes.lookup(&stm.name).ok_or(())?;
         let instr = self.builder.build_store(*ptr, val);
         Ok(instr.into())
     }
 
-    fn visit_block(&mut self, stms: &[Statement]) -> Self::Result {
+    fn visit_expr_stm(&mut self, stm: &ExpressionStm) -> Self::Result {
+        stm.expr.accept(self)
+    }
+
+    fn visit_block(&mut self, stm: &Block) -> Self::Result {
         self.scopes.enter_scope();
-        for stm in stms {
+        for stm in &stm.statements {
             stm.accept(self)?;
         }
         self.scopes.leave_scope();
@@ -139,15 +144,14 @@ impl<'a> Visitor for Generator<'a> {
         Ok(self.context.i32_type().const_int(0, false).into())
     }
 
-    fn visit_binary_op(
-        &mut self,
-        op: &BinaryOp,
-        lhs: &Expression,
-        rhs: &Expression,
-    ) -> Self::Result {
-        let lhs = lhs.accept(self)?.into_float_value();
-        let rhs = rhs.accept(self)?.into_float_value();
-        let ret = match op {
+    fn visit_expr(&mut self, expr: &Expression) -> Self::Result {
+        expr.accept(self)
+    }
+
+    fn visit_binary_op(&mut self, expr: &BinaryExpr) -> Self::Result {
+        let lhs = expr.lhs.accept(self)?.into_float_value();
+        let rhs = expr.rhs.accept(self)?.into_float_value();
+        let ret = match expr.op {
             BinaryOp::Add => self.builder.build_float_add(lhs, rhs, "tmpadd").into(),
             BinaryOp::Sub => self.builder.build_float_sub(lhs, rhs, "tmpsub").into(),
             BinaryOp::Mul => self.builder.build_float_mul(lhs, rhs, "tmpmul").into(),
@@ -156,17 +160,17 @@ impl<'a> Visitor for Generator<'a> {
         Ok(ret)
     }
 
-    fn visit_unary_op(&mut self, op: &UnaryOp, expr: &Expression) -> Self::Result {
-        let val = expr.accept(self)?.into_float_value();
-        let res = match op {
+    fn visit_unary_op(&mut self, expr: &UnaryExpr) -> Self::Result {
+        let val = expr.expr.accept(self)?.into_float_value();
+        let res = match expr.op {
             UnaryOp::Sub => self.builder.build_float_neg(val, "tmpneg").into(),
         };
         Ok(res)
     }
 
-    fn visit_var_ref(&mut self, name: &str) -> Self::Result {
-        let ptr = self.scopes.lookup(name).ok_or(())?;
-        let val = self.builder.build_load(*ptr, name);
+    fn visit_var_ref(&mut self, expr: &VarRef) -> Self::Result {
+        let ptr = self.scopes.lookup(&expr.name).ok_or(())?;
+        let val = self.builder.build_load(*ptr, &expr.name);
         Ok(val.into())
     }
 
@@ -191,7 +195,8 @@ impl<'a> Visitor for Generator<'a> {
                         .builder
                         .build_global_string_ptr(val, "")
                         .as_pointer_value();
-                    self.scopes.register(val.clone(), ptr);
+                    // Static string can be re-used globaly
+                    self.scopes.register_global(val.clone(), ptr);
                     ptr.into()
                 }
             },
@@ -199,9 +204,10 @@ impl<'a> Visitor for Generator<'a> {
         Ok(res)
     }
 
-    fn visit_call_expr(&mut self, name: &str, args: &[Expression]) -> Self::Result {
-        let called_fn = self.module.get_function(name).ok_or(())?;
-        let compiled_args = args
+    fn visit_call_expr(&mut self, expr: &CallExpr) -> Self::Result {
+        let called_fn = self.module.get_function(&expr.name).ok_or(())?;
+        let compiled_args = expr
+            .args
             .iter()
             .map(|a| a.accept(self))
             .map(|res| res.map(|a| BasicValueEnum::try_from(a).map_err(|_| ())))
@@ -209,7 +215,7 @@ impl<'a> Visitor for Generator<'a> {
             .collect::<Result<Vec<_>, ()>>()?;
         let ret = self
             .builder
-            .build_call(called_fn, compiled_args.as_slice(), name)
+            .build_call(called_fn, compiled_args.as_slice(), &expr.name)
             .try_as_basic_value()
             .left()
             .ok_or(())?;

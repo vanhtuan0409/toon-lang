@@ -1,22 +1,12 @@
 use super::*;
-use crate::visitor::{Visitable, Visitor};
+use crate::visitor::{MutVisitor, Visitable, Visitor};
 
 #[derive(Debug, Clone)]
 pub enum StatementKind {
-    VarDecl {
-        name: String,
-        ty: Option<PrimeType>,
-        init_val: Option<Expression>,
-    },
-
-    Assignment {
-        name: String,
-        expr: Expression,
-    },
-
-    Expression(Expression),
-
-    Block(Vec<Statement>),
+    VarDecl(VarDecl),
+    Assignment(Assignment),
+    Expression(ExpressionStm),
+    Block(Block),
 }
 
 #[derive(Debug, Clone)]
@@ -28,12 +18,48 @@ pub struct Statement {
 impl Visitable for Statement {
     fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Result {
         match &self.kind {
-            StatementKind::VarDecl { name, ty, init_val } => {
-                visitor.visit_var_decl(name, ty.as_ref(), init_val.as_ref())
-            }
-            StatementKind::Assignment { name, expr } => visitor.visit_assignment(name, expr),
-            StatementKind::Expression(expr) => expr.accept(visitor),
-            StatementKind::Block(statements) => visitor.visit_block(&statements),
+            StatementKind::VarDecl(stm) => visitor.visit_var_decl(stm),
+            StatementKind::Assignment(stm) => visitor.visit_assignment(stm),
+            StatementKind::Expression(stm) => visitor.visit_expr_stm(stm),
+            StatementKind::Block(stm) => visitor.visit_block(stm),
         }
     }
+
+    fn accept_mut<V: MutVisitor>(&mut self, visitor: &mut V) -> V::Result {
+        match &mut self.kind {
+            StatementKind::VarDecl(stm) => visitor.visit_var_decl(stm),
+            StatementKind::Assignment(stm) => visitor.visit_assignment(stm),
+            StatementKind::Expression(stm) => visitor.visit_expr_stm(stm),
+            StatementKind::Block(stm) => visitor.visit_block(stm),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct VarDecl {
+    pub name: String,
+    pub ty: Option<PrimeType>,
+    pub init_val: Option<Expression>,
+
+    pub inferred_ty: Option<PrimeType>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Assignment {
+    pub name: String,
+    pub expr: Expression,
+
+    pub inferred_ty: Option<PrimeType>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExpressionStm {
+    pub expr: Expression,
+    pub inferred_ty: Option<PrimeType>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Block {
+    pub statements: Vec<Statement>,
+    pub inferred_ty: Option<PrimeType>,
 }
