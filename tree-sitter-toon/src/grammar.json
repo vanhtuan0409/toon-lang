@@ -256,6 +256,10 @@
         {
           "type": "STRING",
           "value": "bool"
+        },
+        {
+          "type": "STRING",
+          "value": "string"
         }
       ]
     },

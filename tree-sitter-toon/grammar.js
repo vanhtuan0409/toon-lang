@@ -73,7 +73,7 @@ module.exports = grammar({
         $._prime_type,
       ),
 
-    _prime_type: ($) => choice("number", "bool"),
+    _prime_type: ($) => choice("number", "bool", "string"),
 
     statement: ($) =>
       choice(

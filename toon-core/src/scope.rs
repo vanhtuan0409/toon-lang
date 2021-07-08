@@ -43,12 +43,12 @@ impl<T> ScopeManager<T> {
 }
 
 #[derive(Debug)]
-pub struct Scope<T> {
-    pub symbols: HashMap<String, T>,
+struct Scope<T> {
+    symbols: HashMap<String, T>,
 }
 
 impl<T> Scope<T> {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Scope {
             symbols: HashMap::new(),
         }

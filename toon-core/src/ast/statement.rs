@@ -13,6 +13,19 @@ pub enum StatementKind {
 pub struct Statement {
     pub kind: StatementKind,
     pub inferred_ty: Option<PrimeType>,
+    pub pos: Pos,
+}
+
+impl Statement {
+    pub fn set_inferred_ty(&mut self) -> Option<&PrimeType> {
+        self.inferred_ty = match &self.kind {
+            StatementKind::VarDecl(stm) => stm.inferred_ty,
+            StatementKind::Assignment(stm) => stm.inferred_ty,
+            StatementKind::Expression(stm) => stm.inferred_ty,
+            StatementKind::Block(stm) => stm.inferred_ty,
+        };
+        self.inferred_ty.as_ref()
+    }
 }
 
 impl Visitable for Statement {
@@ -42,6 +55,7 @@ pub struct VarDecl {
     pub init_val: Option<Expression>,
 
     pub inferred_ty: Option<PrimeType>,
+    pub pos: Pos,
 }
 
 #[derive(Debug, Clone)]
@@ -50,16 +64,19 @@ pub struct Assignment {
     pub expr: Expression,
 
     pub inferred_ty: Option<PrimeType>,
+    pub pos: Pos,
 }
 
 #[derive(Debug, Clone)]
 pub struct ExpressionStm {
     pub expr: Expression,
     pub inferred_ty: Option<PrimeType>,
+    pub pos: Pos,
 }
 
 #[derive(Debug, Clone)]
 pub struct Block {
     pub statements: Vec<Statement>,
     pub inferred_ty: Option<PrimeType>,
+    pub pos: Pos,
 }

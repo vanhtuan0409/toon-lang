@@ -9,3 +9,5 @@ pub use lit::*;
 pub use prime_type::*;
 pub use program::*;
 pub use statement::*;
+
+pub type Pos = (usize, usize);

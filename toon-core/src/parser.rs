@@ -32,18 +32,22 @@ fn parse_statement(node: Node, src: &[u8]) -> Result<Statement, ()> {
         "block" => parse_block(child, src),
         _ => {
             let expr = parse_expr(child, src)?;
+            let pos = (node.start_byte(), node.end_byte());
             Ok(Statement {
                 kind: StatementKind::Expression(ExpressionStm {
                     expr,
                     inferred_ty: None,
+                    pos,
                 }),
                 inferred_ty: None,
+                pos,
             })
         }
     }
 }
 
 fn parse_var_decl(node: Node, src: &[u8]) -> Result<Statement, ()> {
+    let pos = (node.start_byte(), node.end_byte());
     let name = node
         .child_by_field_name("var_name")
         .ok_or(())?
@@ -66,12 +70,15 @@ fn parse_var_decl(node: Node, src: &[u8]) -> Result<Statement, ()> {
             ty,
             init_val,
             inferred_ty: None,
+            pos,
         }),
         inferred_ty: None,
+        pos,
     })
 }
 
 fn parse_assign_stm(node: Node, src: &[u8]) -> Result<Statement, ()> {
+    let pos = (node.start_byte(), node.end_byte());
     let name = node
         .child_by_field_name("var_name")
         .ok_or(())?
@@ -85,12 +92,15 @@ fn parse_assign_stm(node: Node, src: &[u8]) -> Result<Statement, ()> {
             name,
             expr,
             inferred_ty: None,
+            pos,
         }),
         inferred_ty: None,
+        pos,
     })
 }
 
 fn parse_block(node: Node, src: &[u8]) -> Result<Statement, ()> {
+    let pos = (node.start_byte(), node.end_byte());
     let child_count = node.named_child_count();
     let mut ret: Vec<Statement> = vec![];
     for i in 0..child_count {
@@ -105,8 +115,10 @@ fn parse_block(node: Node, src: &[u8]) -> Result<Statement, ()> {
         kind: StatementKind::Block(Block {
             statements: ret,
             inferred_ty: None,
+            pos,
         }),
         inferred_ty: None,
+        pos,
     })
 }
 
@@ -116,6 +128,7 @@ fn parse_prime_type(node: Node, src: &[u8]) -> Result<PrimeType, ()> {
         "number" => Ok(PrimeType::Number),
         "bool" => Ok(PrimeType::Bool),
         "string" => Ok(PrimeType::String),
+        "void" => Ok(PrimeType::Void),
         _ => Err(()),
     }
 }
@@ -149,14 +162,17 @@ fn parse_binary_expr(node: Node, src: &[u8]) -> Result<Expression, ()> {
         }
     };
 
+    let pos = (node.start_byte(), node.end_byte());
     Ok(Expression {
         kind: ExpressionKind::BinaryExpr(BinaryExpr {
             lhs: Box::new(parse_expr(left_node, src)?),
             rhs: Box::new(parse_expr(right_node, src)?),
             op,
             inferred_ty: None,
+            pos,
         }),
         inferred_ty: None,
+        pos,
     })
 }
 
@@ -170,17 +186,21 @@ fn parse_unary_expr(node: Node, src: &[u8]) -> Result<Expression, ()> {
         }
     };
 
+    let pos = (node.start_byte(), node.end_byte());
     Ok(Expression {
         kind: ExpressionKind::UnaryExpr(UnaryExpr {
             expr: Box::new(parse_expr(operand_node, src)?),
             op,
             inferred_ty: None,
+            pos,
         }),
         inferred_ty: None,
+        pos,
     })
 }
 
 fn parse_lit(node: Node, src: &[u8]) -> Result<Expression, ()> {
+    let pos = (node.start_byte(), node.end_byte());
     match node.kind() {
         "number_lit" => {
             let snip = node.utf8_text(src).map_err(|_| ())?;
@@ -188,6 +208,7 @@ fn parse_lit(node: Node, src: &[u8]) -> Result<Expression, ()> {
             Ok(Expression {
                 kind: ExpressionKind::Lit(Lit::Number(val)),
                 inferred_ty: Some(PrimeType::Number),
+                pos,
             })
         }
         "bool_lit" => {
@@ -200,6 +221,7 @@ fn parse_lit(node: Node, src: &[u8]) -> Result<Expression, ()> {
             Ok(Expression {
                 kind: ExpressionKind::Lit(Lit::Bool(val)),
                 inferred_ty: Some(PrimeType::Bool),
+                pos,
             })
         }
         "string_lit" => {
@@ -208,6 +230,7 @@ fn parse_lit(node: Node, src: &[u8]) -> Result<Expression, ()> {
             Ok(Expression {
                 kind: ExpressionKind::Lit(Lit::String(snip)),
                 inferred_ty: Some(PrimeType::String),
+                pos,
             })
         }
         _ => Err(()),
@@ -216,12 +239,15 @@ fn parse_lit(node: Node, src: &[u8]) -> Result<Expression, ()> {
 
 fn parse_var_ref(node: Node, src: &[u8]) -> Result<Expression, ()> {
     let var_name = node.utf8_text(src).map_err(|_| ())?.to_string();
+    let pos = (node.start_byte(), node.end_byte());
     Ok(Expression {
         kind: ExpressionKind::VarRef(VarRef {
             name: var_name,
             inferred_ty: None,
+            pos,
         }),
         inferred_ty: None,
+        pos,
     })
 }
 
@@ -234,13 +260,16 @@ fn parse_call_expr(node: Node, src: &[u8]) -> Result<Expression, ()> {
         .to_string();
     let args_node = node.child_by_field_name("args").ok_or(())?;
     let args = parse_arg_list(args_node, src)?;
+    let pos = (node.start_byte(), node.end_byte());
     Ok(Expression {
         kind: ExpressionKind::CallExpr(CallExpr {
             name: func_name,
             args,
             inferred_ty: None,
+            pos,
         }),
         inferred_ty: None,
+        pos,
     })
 }
 

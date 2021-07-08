@@ -1,0 +1,7 @@
+let x: number;
+let y = x-1;
+{
+  let y = "asdasd";
+  printf("%s\n", y);
+}
+printf("%.2f\n", y);

@@ -45,10 +45,15 @@ impl<'a> Generator<'a> {
         self.link_printf()?;
         self.gen_main()?;
         for stm in prog.statements.iter() {
-            stm.accept(self)?;
+            self.visit_statement(stm)?;
         }
-        self.builder
-            .build_return(Some(&self.context.i32_type().const_int(0, false)));
+        self.builder.build_return(Some(
+            &self
+                .context
+                .i8_type()
+                .ptr_type(AddressSpace::Generic)
+                .const_null(),
+        ));
         Ok(&self.module)
     }
 
@@ -66,7 +71,7 @@ impl<'a> Generator<'a> {
     }
 
     fn gen_main(&mut self) -> Result<(), ()> {
-        let fn_type = self.context.i32_type().fn_type(&[], false);
+        let fn_type = self.context.void_type().fn_type(&[], false);
         let main_fn = self.module.add_function("main", fn_type, None);
         let basic_block = self.context.append_basic_block(main_fn, "entry");
         self.builder.position_at_end(basic_block);
@@ -83,6 +88,9 @@ impl<'a> Generator<'a> {
                 .i8_type()
                 .ptr_type(AddressSpace::Generic)
                 .as_basic_type_enum(),
+            PrimeType::Void => {
+                panic!("Invalid type")
+            }
         }
     }
 }
@@ -95,53 +103,43 @@ impl<'a> Visitor for Generator<'a> {
     }
 
     fn visit_var_decl(&mut self, stm: &VarDecl) -> Self::Result {
-        match (&stm.ty, &stm.init_val) {
-            (None, None) => Err(()),
-            (Some(ty), None) => {
-                let ty = self.get_llvm_data_type(ty);
-                let ptr = self.builder.build_alloca(ty, &stm.name);
-                self.scopes.register_local(stm.name.clone(), ptr);
-                Ok(ptr.into())
-            }
-            (None, Some(expr)) => {
-                let val: BasicValueEnum = expr.accept(self)?.try_into()?;
-                let ty = val.get_type();
-                let ptr = self.builder.build_alloca(ty, &stm.name);
-                self.scopes.register_local(stm.name.clone(), ptr);
-                let instr = self.builder.build_store(ptr, val);
-                Ok(instr.into())
-            }
-            (Some(ty), Some(expr)) => {
-                let ty = self.get_llvm_data_type(ty);
-                let ptr = self.builder.build_alloca(ty, &stm.name);
-                self.scopes.register_local(stm.name.clone(), ptr);
-                let val: BasicValueEnum = expr.accept(self)?.try_into()?;
-                let instr = self.builder.build_store(ptr, val);
-                Ok(instr.into())
-            }
-        }
+        // expect type already inferred
+        let ty = self.get_llvm_data_type(&stm.inferred_ty.unwrap());
+        let ptr = self.builder.build_alloca(ty, &stm.name);
+        self.scopes.register_local(stm.name.clone(), ptr);
+
+        // expect default value is set during type checking
+        let expr = stm.init_val.as_ref().unwrap();
+        let val: BasicValueEnum = self.visit_expr(expr)?.try_into()?;
+        let instr = self.builder.build_store(ptr, val);
+
+        Ok(instr.into())
     }
 
     fn visit_assignment(&mut self, stm: &Assignment) -> Self::Result {
-        let val: BasicValueEnum = stm.expr.accept(self)?.try_into()?;
+        let val: BasicValueEnum = self.visit_expr(&stm.expr)?.try_into()?;
         let ptr = self.scopes.lookup(&stm.name).ok_or(())?;
         let instr = self.builder.build_store(*ptr, val);
         Ok(instr.into())
     }
 
     fn visit_expr_stm(&mut self, stm: &ExpressionStm) -> Self::Result {
-        stm.expr.accept(self)
+        self.visit_expr(&stm.expr)
     }
 
     fn visit_block(&mut self, stm: &Block) -> Self::Result {
         self.scopes.enter_scope();
         for stm in &stm.statements {
-            stm.accept(self)?;
+            self.visit_statement(stm)?;
         }
         self.scopes.leave_scope();
 
-        // HACK: return void value
-        Ok(self.context.i32_type().const_int(0, false).into())
+        Ok(self
+            .context
+            .i8_type()
+            .ptr_type(AddressSpace::Generic)
+            .const_null()
+            .into())
     }
 
     fn visit_expr(&mut self, expr: &Expression) -> Self::Result {
@@ -149,8 +147,8 @@ impl<'a> Visitor for Generator<'a> {
     }
 
     fn visit_binary_op(&mut self, expr: &BinaryExpr) -> Self::Result {
-        let lhs = expr.lhs.accept(self)?.into_float_value();
-        let rhs = expr.rhs.accept(self)?.into_float_value();
+        let lhs = self.visit_expr(&expr.lhs)?.into_float_value();
+        let rhs = self.visit_expr(&expr.rhs)?.into_float_value();
         let ret = match expr.op {
             BinaryOp::Add => self.builder.build_float_add(lhs, rhs, "tmpadd").into(),
             BinaryOp::Sub => self.builder.build_float_sub(lhs, rhs, "tmpsub").into(),
@@ -161,7 +159,7 @@ impl<'a> Visitor for Generator<'a> {
     }
 
     fn visit_unary_op(&mut self, expr: &UnaryExpr) -> Self::Result {
-        let val = expr.expr.accept(self)?.into_float_value();
+        let val = self.visit_expr(&expr.expr)?.into_float_value();
         let res = match expr.op {
             UnaryOp::Sub => self.builder.build_float_neg(val, "tmpneg").into(),
         };
@@ -209,7 +207,7 @@ impl<'a> Visitor for Generator<'a> {
         let compiled_args = expr
             .args
             .iter()
-            .map(|a| a.accept(self))
+            .map(|a| self.visit_expr(a))
             .map(|res| res.map(|a| BasicValueEnum::try_from(a).map_err(|_| ())))
             .flatten()
             .collect::<Result<Vec<_>, ()>>()?;

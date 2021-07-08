@@ -2,7 +2,9 @@ use clap::Clap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use toon_core::{compile_asm, compile_executable, compile_object_code, parse, Generator};
+use toon_core::{
+    compile_asm, compile_executable, compile_object_code, parse, Generator, TypeChecker,
+};
 
 #[derive(Clap)]
 pub enum OutputType {
@@ -48,7 +50,11 @@ pub fn compile(args: Opts) {
         .canonicalize()
         .expect("Invalid file path");
     let src = fs::read(&path).expect("Unable to read source file");
-    let prog = parse(&src).expect("Unable to build AST from source");
+    let mut prog = parse(&src).expect("Unable to build AST from source");
+    if let Err(err) = TypeChecker::new().check(&mut prog, &src) {
+        println!("{}", err);
+        return;
+    }
 
     let ctx = Generator::empty_context();
     let mut generator = Generator::new(&ctx, path.to_str().unwrap());
