@@ -24,4 +24,5 @@ pub trait Visitor {
     fn visit_lit(&mut self, lit: &Lit) -> Self::Result;
     fn visit_call_expr(&mut self, name: &str, args: &[Expression]) -> Self::Result;
     fn visit_assignment(&mut self, name: &str, expr: &Expression) -> Self::Result;
+    fn visit_block(&mut self, stms: &[Statement]) -> Self::Result;
 }

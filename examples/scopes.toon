@@ -1,6 +1,7 @@
 let x = 1;
 {
+  // Enter new scope
   let x = 2;
-  prinf("%.2f", x);
+  printf("x = %.2f\n", x);
 }
-prinf("%.2f", x);
+printf("x = %.2f\n", x);

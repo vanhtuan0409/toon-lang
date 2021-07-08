@@ -15,6 +15,8 @@ pub enum Statement {
     },
 
     Expression(Expression),
+
+    Block(Vec<Statement>),
 }
 
 impl Visitable for Statement {
@@ -25,6 +27,7 @@ impl Visitable for Statement {
             }
             Self::Assignment { name, expr } => visitor.visit_assignment(name, expr),
             Self::Expression(expr) => expr.accept(visitor),
+            Self::Block(statements) => visitor.visit_block(&statements),
         }
     }
 }

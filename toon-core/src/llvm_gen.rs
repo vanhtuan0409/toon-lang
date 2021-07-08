@@ -128,6 +128,17 @@ impl<'a> Visitor for Generator<'a> {
         Ok(instr.into())
     }
 
+    fn visit_block(&mut self, stms: &[Statement]) -> Self::Result {
+        self.scopes.enter_scope();
+        for stm in stms {
+            stm.accept(self)?;
+        }
+        self.scopes.leave_scope();
+
+        // HACK: return void value
+        Ok(self.context.i32_type().const_int(0, false).into())
+    }
+
     fn visit_binary_op(
         &mut self,
         op: &BinaryOp,

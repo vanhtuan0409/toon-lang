@@ -29,6 +29,7 @@ fn parse_statement(node: Node, src: &[u8]) -> Result<Statement, ()> {
     match child.kind() {
         "var_decl" => parse_var_decl(child, src),
         "assign_stm" => parse_assign_stm(child, src),
+        "block" => parse_block(child, src),
         _ => {
             let expr = parse_expr(child, src)?;
             Ok(Statement::Expression(expr))
@@ -66,6 +67,19 @@ fn parse_assign_stm(node: Node, src: &[u8]) -> Result<Statement, ()> {
     let expr_node = node.child_by_field_name("var_expr").ok_or(())?;
     let expr = parse_expr(expr_node, src)?;
     Ok(Statement::Assignment { name, expr })
+}
+
+fn parse_block(node: Node, src: &[u8]) -> Result<Statement, ()> {
+    let child_count = node.named_child_count();
+    let mut ret: Vec<Statement> = vec![];
+    for i in 0..child_count {
+        let child = node.named_child(i).unwrap();
+        if is_extra_node(&child) {
+            continue;
+        }
+        ret.push(parse_statement(child, src)?);
+    }
+    Ok(Statement::Block(ret))
 }
 
 fn parse_prime_type(node: Node, src: &[u8]) -> Result<PrimeType, ()> {

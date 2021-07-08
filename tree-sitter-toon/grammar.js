@@ -24,8 +24,8 @@ module.exports = grammar({
 
   rules: {
     root: ($) =>
-      choice(
-        repeat($.statement),
+      repeat(
+        $.statement,
       ),
 
     ident: ($) =>
@@ -80,6 +80,7 @@ module.exports = grammar({
         $.var_decl,
         $.assign_stm,
         seq($._expression, terminator),
+        $.block,
       ),
 
     var_decl: ($) =>
@@ -104,6 +105,8 @@ module.exports = grammar({
         field("var_expr", $._expression),
         terminator,
       ),
+
+    block: ($) => seq("{", repeat($.statement), "}"),
 
     _expression: ($) =>
       choice(
