@@ -2,7 +2,7 @@ use super::*;
 use crate::visitor::{Visitable, Visitor};
 
 #[derive(Debug, Clone)]
-pub enum Expression {
+pub enum ExpressionKind {
     Lit(Lit),
     BinaryExpr {
         lhs: Box<Expression>,
@@ -20,14 +20,22 @@ pub enum Expression {
     },
 }
 
+#[derive(Debug, Clone)]
+pub struct Expression {
+    pub kind: ExpressionKind,
+    pub inferred_ty: Option<PrimeType>,
+}
+
 impl Visitable for Expression {
     fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Result {
-        match self {
-            Self::BinaryExpr { op, lhs, rhs } => visitor.visit_binary_op(op, lhs, rhs),
-            Self::UnaryExpr { op, expr } => visitor.visit_unary_op(op, expr),
-            Self::Lit(lit) => visitor.visit_lit(lit),
-            Self::VarRef(name) => visitor.visit_var_ref(name),
-            Self::CallExpr { name, args } => visitor.visit_call_expr(name, args.as_slice()),
+        match &self.kind {
+            ExpressionKind::BinaryExpr { op, lhs, rhs } => visitor.visit_binary_op(op, lhs, rhs),
+            ExpressionKind::UnaryExpr { op, expr } => visitor.visit_unary_op(op, expr),
+            ExpressionKind::Lit(lit) => visitor.visit_lit(lit),
+            ExpressionKind::VarRef(name) => visitor.visit_var_ref(name),
+            ExpressionKind::CallExpr { name, args } => {
+                visitor.visit_call_expr(name, args.as_slice())
+            }
         }
     }
 }

@@ -37,6 +37,6 @@ impl<T> ScopeStack<T> {
 }
 
 #[derive(Debug)]
-struct Scope<T> {
-    symbols: HashMap<String, T>,
+pub struct Scope<T> {
+    pub symbols: HashMap<String, T>,
 }

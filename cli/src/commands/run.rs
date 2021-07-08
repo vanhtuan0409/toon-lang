@@ -21,5 +21,5 @@ pub fn run(args: Opts) {
     let ir_mod = generator.gen(&prog).expect("Unable to generate LLVM IR");
 
     let ret: i32 = jit_execute(&ir_mod, "main").expect("Unable to execute code");
-    println!("Result: {}", ret);
+    println!("Exit code: {}", ret);
 }
